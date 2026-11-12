@@ -1,10 +1,10 @@
 name: Repository Keepalive
-# enabled
 
 on:
   schedule:
-    # 每30天运行一次（可自定义），避免仓库未更新导致Actions被禁用
-    - cron: '0 0 */30 * *'
+    # 每 14 天运行一次（UTC），留足余量，避免仓库 60 天无活动被 GitHub 自动停用 Actions
+    # UTC 16:00 = 北京时间次日 00:00
+    - cron: '0 16 */14 * *'
   workflow_dispatch:  # 允许手动触发
 
 jobs:
@@ -18,10 +18,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.PAT }}
 
       - name: Update keepalive timestamp
         run: |
-          # 创建或更新保活文件
           mkdir -p .github
           cat > .github/KEEPALIVE.md << EOF
           # Repository Keepalive
@@ -37,13 +37,19 @@ jobs:
           EOF
 
       - name: Commit and push changes
+        env:
+          PAT: ${{ secrets.PAT }}
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
+          # fork 仓库默认 GITHUB_TOKEN 只读，优先用 PAT 推送；未配置 PAT 时回退默认 token
+          if [ -n "$PAT" ]; then
+            git remote set-url origin "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git"
+          fi
+
           git add .github/KEEPALIVE.md
 
-          # 只有文件变化时才提交
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
